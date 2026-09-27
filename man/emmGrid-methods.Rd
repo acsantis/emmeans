@@ -4,6 +4,7 @@
 \alias{str.emmGrid}
 \alias{print.emmGrid}
 \alias{vcov.emmGrid}
+\alias{bootstrap_samples}
 \alias{linfct}
 \alias{linfct.default}
 \title{Miscellaneous methods for \code{emmGrid} objects}
@@ -13,6 +14,8 @@
 \method{print}{emmGrid}(x, ..., export = FALSE)
 
 \method{vcov}{emmGrid}(object, ..., sep = get_emm_option("sep"))
+
+bootstrap_samples(object, type = c("emm", "coefficients"))
 
 linfct(object, ...)
 
@@ -35,10 +38,18 @@ have been printed below the summary or summaries.}
 
 \item{sep}{separator for pasting levels in creating row and column
 names for \code{vcov()} results}
+
+\item{type}{Character value: \code{"emm"} returns bootstrap samples of
+the estimates represented by \code{object}; \code{"coefficients"}
+returns the underlying coefficient samples.}
 }
 \value{
 The \code{vcov} method returns a symmetric matrix of variances and
   covariances for \code{predict.emmGrid(object, type = "lp")}
+
+The \code{bootstrap_samples} method returns a matrix whose rows are
+  bootstrap replicates. It returns an error if \code{object} was not created
+  with bootstrap samples.
 
 The \code{linfct} function and method returns the \code{linfct} slot of \code{object}.
 }

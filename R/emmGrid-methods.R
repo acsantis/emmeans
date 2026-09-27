@@ -172,6 +172,45 @@ vcov.emmGrid = function(object, ..., sep = get_emm_option("sep")) {
     }
 }
 
+#' @rdname emmGrid-methods
+#' @param type Character value: \code{"emm"} returns bootstrap samples of
+#'   the estimates represented by \code{object}; \code{"coefficients"}
+#'   returns the underlying coefficient samples.
+#' @return The \code{bootstrap_samples} method returns a matrix whose rows are
+#'   bootstrap replicates. It returns an error if \code{object} was not created
+#'   with bootstrap samples.
+#' @export
+bootstrap_samples = function(object, type = c("emm", "coefficients")) {
+    if (!is(object, "emmGrid"))
+        stop("'object' must be an 'emmGrid' object")
+    type = match.arg(type)
+    draws = object@misc$bootstrap$draws
+    if (is.null(draws))
+        stop("No bootstrap samples are available in 'object'")
+    if (type == "coefficients")
+        return(draws)
+    linfct.names = colnames(object@linfct)
+    if (ncol(draws) == ncol(object@linfct) &&
+        (is.null(colnames(draws)) || is.null(linfct.names) ||
+         !all(linfct.names %in% colnames(draws)))) {
+        coef.names = seq_len(ncol(draws))
+        draws = draws[, coef.names, drop = FALSE]
+        object@linfct = object@linfct[, coef.names, drop = FALSE]
+    }
+    else if (!is.null(colnames(draws)) && !is.null(linfct.names))
+        coef.names = intersect(linfct.names, colnames(draws))
+    else
+        coef.names = character()
+    if (length(coef.names) != ncol(object@linfct))
+        stop("Bootstrap samples are incompatible with the EMM linear functions")
+    samples = draws[, coef.names, drop = FALSE] %*%
+        t(object@linfct[, coef.names, drop = FALSE])
+    colnames(samples) = rownames(object@linfct)
+    if (is.null(colnames(samples)))
+        colnames(samples) = paste0("estimate.", seq_len(ncol(samples)))
+    samples
+}
+
 
 #' @rdname emmGrid-methods
 #'

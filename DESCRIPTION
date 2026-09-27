@@ -27,8 +27,8 @@ Suggests: bayesplot, bayestestR, biglm, brms, car, coda (>= 0.17), compositions,
           ggplot2 (>= 4.0.0), knitr, lattice, lme4, lmerTest (>= 2.0.32), logspline, MASS, 
           mediation, mgcv, multcomp, multcompView, MuMIn, nlme,
           ordinal (>= 2014.11-12), pbkrtest (>= 0.4-1), 
-          rmarkdown, robmixglm, rsm, sandwich, scales, splines, testthat, 
-          tibble, xtable (>= 1.8-2)
+          rmarkdown, robmixglm, rsm, sandwich, scales, splines, testthat,
+          lmeresampler, tibble, xtable (>= 1.8-2)
 Enhances: CARBayes, coxme, gee, geepack, MCMCglmm, MCMCpack, mice, 
           nnet, pscl, rstanarm, sommer, survival         
 URL: https://rvlenth.github.io/emmeans/, https://github.com/rvlenth/emmeans/
@@ -47,3 +47,6 @@ Encoding: UTF-8
 Roxygen: list(old_usage = TRUE)
 VignetteBuilder: knitr
 Config/roxygen2/version: 8.1.0
+RemoteType: local
+RemotePkgRef: local::R:/Richards/Anthony/Software/emmeans/
+RemoteUrl: R:/Richards/Anthony/Software/emmeans/

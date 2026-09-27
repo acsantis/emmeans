@@ -19,3 +19,12 @@ test_that("emtrends works", {
     expect_equal(nrow(summary(emtpa)), 24) # 3 sources * 2 degrees * 4 percents
 })
 
+test_that("emtrends supports bootstrap inference", {
+    emt = emtrends(pigs.lm, ~ source, "percent", bootstrap = TRUE,
+                   bootstrap.n = 20, bootstrap.seed = 42)
+    expect_equal(emt@misc$bootstrap$n, 20)
+    expect_equal(nrow(bootstrap_samples(emt)), 20)
+    expect_true("SE" %in% names(summary(emt)))
+    expect_false(any(c("df", "t.ratio", "z.ratio") %in% names(summary(emt))))
+})
+

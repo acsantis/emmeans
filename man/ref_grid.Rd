@@ -8,7 +8,9 @@ ref_grid(object, at, cov.reduce = mean,
   cov.keep = get_emm_option("cov.keep"), mult.names, mult.levs,
   options = get_emm_option("ref_grid"), data, df, type, regrid, nesting,
   offset, sigma, counterfactuals, nuisance = character(0), non.nuisance,
-  wt.nuis = "equal", rg.limit = get_emm_option("rg.limit"), ...)
+  wt.nuis = "equal", rg.limit = get_emm_option("rg.limit"),
+  bootstrap = FALSE, bootstrap.n = 1000, bootstrap.seed = NULL,
+  bootstrap.type = "parametric", bootstrap.args = list(), ...)
 }
 \arguments{
 \item{object}{An object produced by a supported model-fitting function, such
@@ -104,6 +106,33 @@ is thrown.)}
 
 \item{rg.limit}{Integer limit on the number of reference-grid rows to allow
 (checked before any multivariate responses are included).}
+
+\item{bootstrap}{Logical value. If TRUE, estimate the coefficient covariance
+from bootstrap replicates. For \code{lme4::merMod} models, the
+\pkg{lmeresampler} package is used; otherwise, models supporting
+\code{simulate} and refitting use simulated responses and refits, and
+other models use coefficient draws from the estimated covariance matrix.
+For GLM and GEE objects, \code{bootstrap.type = "case"} resamples rows
+and refits the model; \code{bootstrap.type = "residual"} resamples
+response residuals and refits Gaussian models.
+Standard errors use this covariance; confidence intervals and p-values
+from tests are percentile calculations based on the bootstrap EMM or
+contrast estimates.}
+
+\item{bootstrap.n}{Number of bootstrap replicates (at least 2).}
+
+\item{bootstrap.seed}{Optional integer random-number seed. The prior random
+number state is restored after the bootstrap.}
+
+\item{bootstrap.type}{Bootstrap method. The default is \code{"parametric"},
+which simulates responses and refits the model. GLM and GEE objects also
+support \code{"case"}; Gaussian GLM and GEE objects support
+\code{"residual"}. For \code{lme4::merMod} models, \code{"residual"},
+\code{"case"}, \code{"wild"}, and \code{"reb"} use \pkg{lmeresampler}.}
+
+\item{bootstrap.args}{Optional named list of additional arguments passed to
+\code{lmeresampler::bootstrap}, such as \code{resample}, \code{reb_type},
+\code{hccme}, or \code{aux.dist}.}
 
 \item{...}{Optional arguments passed to \code{\link{summary.emmGrid}},
 \code{\link{emm_basis}}, and
@@ -434,6 +463,13 @@ rg.alt2@grid
 
 
 # Multivariate example
+# Bootstrap inference for EMMs and contrasts
+boot.emm <- emmeans(fiber.lm, "machine", bootstrap = TRUE,
+                    bootstrap.n = 100, bootstrap.seed = 123)
+confint(boot.emm)
+summary(pairs(boot.emm), infer = c(TRUE, TRUE), adjust = "none")
+head(bootstrap_samples(boot.emm))
+
 MOats.lm = lm(yield ~ Block + Variety, data = MOats)
 ref_grid(MOats.lm, mult.names = "nitro")
 # Silly illustration of how to use 'mult.levs' to make comb's of two factors

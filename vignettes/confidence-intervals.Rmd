@@ -85,6 +85,24 @@ confint(EMM.source, calc = c(n = ~.wgt.))
 
 
 [Back to Contents](#contents)
+### Bootstrap inference
+For supported models, `ref_grid()` can use bootstrap replicates to estimate
+the covariance of the model coefficients. The resulting EMMs and contrasts use
+empirical standard errors and percentile intervals and *P* values. For example,
+we can bootstrap the `fiber` model and compare the machines:
+```{r}
+fiber.lm <- lm(strength ~ machine * diameter, data = fiber)
+fiber.boot <- emmeans(fiber.lm, "machine", bootstrap = TRUE,
+                      bootstrap.n = 200, bootstrap.seed = 123)
+confint(fiber.boot)
+summary(pairs(fiber.boot), infer = c(TRUE, TRUE), adjust = "none")
+head(bootstrap_samples(fiber.boot))
+```
+Here, `bootstrap_samples()` returns the bootstrap estimates of the EMMs;
+use `type = "coefficients"` to inspect the underlying coefficient draws.
+The default method is parametric (simulated responses followed by refitting).
+Other model types may support additional methods; see `?ref_grid` for details.
+
 
 
 ## Back-transforming {#tran}

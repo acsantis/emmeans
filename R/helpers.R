@@ -869,6 +869,213 @@ recover_data.svyglm = function(object, data = NULL, ...) {
     vcov.
 }
 
+
+# Estimate coefficient covariance from lmeresampler replicates.
+.lmeresampler.vcov = function(object, basis, trms, xlev, grid, n, type,
+                              bootstrap.args, misc, options, dots) {
+    if (!requireNamespace("lmeresampler", quietly = TRUE))
+        stop("Package 'lmeresampler' is required for bootstrap.type = '",
+             type, "' with an lme4 model")
+    valid = which(!is.na(basis$bhat))
+    coef.names = names(basis$bhat)[valid]
+    if (is.null(coef.names))
+        coef.names = rownames(basis$V)[valid]
+    statistic = if (inherits(object, "merMod") && requireNamespace("lme4", quietly = TRUE))
+        function(fit) lme4::fixef(fit)
+    else function(fit) {
+        args = c(list(object = fit, trms = trms, xlev = xlev,
+                      grid = grid, misc = misc, options = options), dots)
+        bhat = do.call(emm_basis, args)$bhat
+        if (is.null(names(bhat)) && length(bhat) == length(coef.names))
+            names(bhat) = coef.names
+        if (length(bhat) != length(coef.names) ||
+            is.null(names(bhat)) || !all(coef.names %in% names(bhat)))
+            stop("Refitted model returned incompatible coefficient names")
+        bhat[coef.names]
+    }
+    statistic = local({
+        f = statistic
+        function(fit) {
+            bhat = f(fit)
+            if (is.null(names(bhat)) && length(bhat) == length(coef.names))
+                names(bhat) = coef.names
+            if (length(bhat) != length(coef.names) ||
+                is.null(names(bhat)) || !all(coef.names %in% names(bhat)))
+                stop("Refitted model returned incompatible coefficient names")
+            bhat[coef.names]
+        }
+    })
+    call.args = c(list(model = object, .f = statistic, type = type, B = n),
+                  bootstrap.args)
+    if (any(duplicated(names(call.args))))
+        stop("'bootstrap.args' cannot override model, .f, type, or B")
+    boot = do.call(lmeresampler::bootstrap, call.args)
+    draws = as.matrix(boot$replicates)
+    if (ncol(draws) != length(valid))
+        stop("lmeresampler returned an incompatible number of coefficients")
+    draws = draws[apply(draws, 1, function(x) all(is.finite(x))), , drop = FALSE]
+    if (nrow(draws) < max(2, ceiling(n / 2)))
+        stop("Too few successful lmeresampler bootstrap replicates")
+    colnames(draws) = coef.names
+    V = stats::cov(draws)
+    dimnames(V) = list(coef.names, coef.names)
+        list(V = V, draws = draws, method = paste0(type, " (lmeresampler)"),
+            n = nrow(draws))
+}
+
+# Estimate coefficient covariance from automatic bootstrap replicates.
+.bootstrap.vcov = function(object, basis, trms, xlev, grid, n, seed,
+                           misc, options, dots, type = "parametric",
+                           bootstrap.args = list()) {
+    if (!is.null(seed)) {
+        had.seed = exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+        if (had.seed)
+            old.seed = get(".Random.seed", envir = .GlobalEnv)
+        on.exit(if (had.seed)
+                    assign(".Random.seed", old.seed, envir = .GlobalEnv)
+                else if (exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE))
+                    rm(".Random.seed", envir = .GlobalEnv))
+        set.seed(seed)
+    }
+
+    valid = which(!is.na(basis$bhat))
+    if (length(valid) == 0)
+        stop("No estimable coefficients are available for bootstrap inference")
+    if (inherits(object, "merMod") &&
+        type %in% c("residual", "case", "wild", "reb"))
+        return(.lmeresampler.vcov(object, basis, trms, xlev, grid, n, type,
+                                  bootstrap.args, misc, options, dots))
+    coef.names = names(basis$bhat)[valid]
+    V0 = basis$V
+    if (nrow(V0) == length(basis$bhat))
+        V0 = V0[valid, valid, drop = FALSE]
+    else if (nrow(V0) != length(valid))
+        stop("The coefficient covariance has incompatible dimensions")
+    if (is.null(coef.names))
+        coef.names = rownames(V0)
+    draws = NULL
+    method = "coefficient draws"
+
+    frame = try(stats::model.frame(object), silent = TRUE)
+    form = try(stats::formula(object), silent = TRUE)
+    is.gee = inherits(object, c("gee", "geeglm", "geese", "glmgee"))
+    gee.id.name = if (is.gee && !is.null(object$call$id) && is.name(object$call$id))
+                      as.character(object$call$id) else NULL
+    is.resampling = type %in% c("case", "residual")
+    simulated = if (is.resampling || inherits(object, c("gee", "geeglm", "geese", "glmgee")))
+                    structure("resampling requested", class = "try-error")
+                else try(stats::simulate(object, nsim = n), silent = TRUE)
+    response.name = if (!inherits(form, "try-error") && inherits(form, "formula") &&
+                        is.name(form[[2]])) as.character(form[[2]]) else NULL
+    if (type == "case" && is.null(response.name) && !inherits(frame, "try-error"))
+        response.name = names(frame)[1]
+    if (type == "residual") {
+        fam = try(stats::family(object), silent = TRUE)
+        if (inherits(fam, "try-error") || fam$family != "gaussian" || is.null(response.name))
+            stop("Residual bootstrap is currently supported for Gaussian GLM and GEE models only")
+        response = stats::model.response(frame)
+        fitted = as.numeric(stats::fitted(object))
+        residuals = as.numeric(stats::residuals(object, type = "response"))
+        if (length(response) != nrow(frame) || length(fitted) != nrow(frame) ||
+            length(residuals) != nrow(frame))
+            stop("Residual bootstrap requires a one-column Gaussian response")
+    }
+    if (type == "case") {
+        response = stats::model.response(frame)
+        if (length(response) != nrow(frame))
+            stop("Case bootstrap requires a one-column response")
+        if (!is.gee)
+            form[[2]] = as.name(".emm_boot_response")
+    }
+    can.refit = is.resampling ||
+        (!inherits(simulated, "try-error") && nrow(simulated) == nrow(frame) &&
+         ncol(simulated) == n)
+    if (!inherits(frame, "try-error") && inherits(form, "formula") && can.refit) {
+        if (!inherits(simulated, "try-error"))
+            simulated = as.matrix(simulated)
+        if (!is.resampling || !is.null(response.name)) {
+            if (!is.resampling)
+                form[[2]] = as.name(".emm_boot_response")
+            draws = matrix(NA_real_, nrow = n, ncol = length(valid))
+            colnames(draws) = coef.names
+            good = logical(n)
+            for (i in seq_len(n)) {
+                if (type == "case") {
+                    if (is.gee) {
+                        if (is.null(gee.id.name) || is.null(object$id))
+                            stop("GEE case bootstrap requires a simple cluster id")
+                        cluster.ids = unique(object$id)
+                        sampled.clusters = sample(cluster.ids, length(cluster.ids), replace = TRUE)
+                        cluster.rows = lapply(sampled.clusters,
+                            function(cluster) which(object$id == cluster))
+                        idx = unlist(cluster.rows, use.names = FALSE)
+                        boot.data = frame[idx, , drop = FALSE]
+                        boot.data[[gee.id.name]] = rep(seq_along(cluster.rows),
+                                                       lengths(cluster.rows))
+                        boot.data[[response.name]] = response[idx]
+                        fit = try(stats::update(object, data = boot.data), silent = TRUE)
+                    }
+                    else {
+                        idx = sample.int(nrow(frame), replace = TRUE)
+                        boot.data = frame[idx, , drop = FALSE]
+                        boot.data$.emm_boot_response = response[idx]
+                        fit = try(stats::update(object, formula = form, data = boot.data), silent = TRUE)
+                    }
+                }
+                else {
+                    boot.data = frame
+                    if (type == "residual") {
+                        if (is.gee) {
+                            if (is.null(gee.id.name) || is.null(object$id))
+                                stop("GEE residual bootstrap requires a simple cluster id")
+                            boot.data[[gee.id.name]] = object$id
+                            boot.data[[response.name]] = fitted + sample(residuals, replace = TRUE)
+                            fit = try(stats::update(object, data = boot.data), silent = TRUE)
+                        }
+                        else {
+                            boot.data[[response.name]] = fitted + sample(residuals, replace = TRUE)
+                            fit = try(stats::update(object, formula = form, data = boot.data), silent = TRUE)
+                        }
+                    }
+                    else {
+                        boot.data$.emm_boot_response = simulated[, i]
+                        fit = try(stats::update(object, formula = form, data = boot.data), silent = TRUE)
+                    }
+                }
+                if (inherits(fit, "try-error"))
+                    next
+                args = c(list(object = fit, trms = trms, xlev = xlev,
+                              grid = grid, misc = misc, options = options), dots)
+                boot.basis = try(do.call(emm_basis, args), silent = TRUE)
+                if (inherits(boot.basis, "try-error"))
+                    next
+                bhat = boot.basis$bhat
+                if (!is.null(coef.names) && !is.null(names(bhat)))
+                    bhat = bhat[coef.names]
+                if (length(bhat) == length(valid) && all(is.finite(bhat))) {
+                    draws[i, ] = bhat
+                    good[i] = TRUE
+                }
+            }
+            draws = draws[good, , drop = FALSE]
+            if (nrow(draws) >= max(2, ceiling(n / 2)))
+                method = if (type == "case") "case/refit"
+                         else if (type == "residual") "residual/refit"
+                         else "simulate/refit"
+            else
+                draws = NULL
+        }
+    }
+
+    if (is.null(draws)) {
+        draws = mvtnorm::rmvnorm(n, mean = basis$bhat[valid], sigma = V0)
+        method = "coefficient draws"
+    }
+    V = stats::cov(draws)
+    dimnames(V) = list(coef.names, coef.names)
+    list(V = V, draws = draws, method = method, n = nrow(draws))
+}
+
 #' @rdname extending-emmeans
 #' @order 30
 #' @param fam Result of call to \code{family(object)}

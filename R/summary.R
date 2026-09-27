@@ -41,25 +41,9 @@ as.data.frame.summary_emm = function(x, ...) {
 #' These are the primary methods for obtaining numerical or tabular results from
 #' an \code{emmGrid} object. \code{summary.emmGrid} is the general function for
 #' summarizing \code{emmGrid} objects. It also serves as the print method for
-#' these objects; so for convenience, \code{summary()} arguments may be included
-#' in calls to functions such as \code{\link{emmeans}} and
-#' \code{\link{contrast}} that construct \code{emmGrid} objects. Note that by
-#' default, summaries for Bayesian models are diverted to
-#' \code{\link{hpd.summary}}.
-#'
-#' \code{confint.emmGrid} is equivalent to \code{summary.emmGrid with
-#' infer = c(TRUE, FALSE)}. The function \code{test.emmGrid}, when called with
-#' \code{joint = FALSE}, is equivalent to \code{summary.emmGrid} with \code{infer = c(FALSE, TRUE)}.
-#'
-#' With \code{joint = TRUE}, \code{test.emmGrid} calculates the Wald test of the
-#' hypothesis \code{linfct \%*\% bhat = null}, where \code{linfct} and
-#' \code{bhat} refer to slots in \code{object} (possibly subsetted according to
-#' \code{by} or \code{rows}). An error is thrown if any row of \code{linfct} is
-#' non-estimable. It is permissible for the rows of \code{linfct} to be linearly
-#' dependent, as long as \code{null == 0}, in which case a reduced set of
-#' contrasts is tested. Linear dependence and nonzero \code{null} cause an
-#' error. The returned object has an additional \code{"est.fcns"} attribute, which
-#' is a list of the linear functions associated with the joint test.
+#' these objects; so for convenience, summary arguments may be included in calls
+#' to functions such as \code{emmeans} and \code{contrast} that construct
+#' \code{emmGrid} objects.
 #'
 #' @param object An object of class \code{"emmGrid"} (see \link{emmGrid-class})
 #' @param infer A vector of one or two logical values. The first determines
@@ -69,38 +53,17 @@ as.data.frame.summary_emm = function(x, ...) {
 #' @param level Numerical value between 0 and 1. Confidence level for confidence
 #'   intervals, if \code{infer[1]} is \code{TRUE}.
 #' @param adjust Character value naming the method used to adjust \eqn{p} values
-#'   or confidence limits; or to adjust comparison arrows in \code{plot}. See
-#'   the P-value adjustments section below.
+#'   or confidence limits; see the P-value adjustments section below.
 #' @param by Character name(s) of variables to use for grouping into separate
 #'   tables. This affects the family of tests considered in adjusted \emph{P}
 #'   values.
-#' @param cross.adjust Character: \eqn{p}-value adjustment method to
-#'   additionally apply \emph{across}
-#'   the \code{by} groups. See the section on P-value adjustments for details.
-#' @param type Character: type of prediction desired. This only has an effect if
-#'   there is a known transformation or link function. \code{"response"}
-#'   specifies that the inverse transformation be applied. \code{"mu"} (or
-#'   equivalently, \code{"unlink"}) is usually the same as \code{"response"},
-#'   but in the case where the model has both a link function and a response
-#'   transformation, only the link part is back-transformed. Other valid values
-#'   are \code{"link"}, \code{"lp"}, and \code{"linear.predictor"}; these are
-#'   equivalent, and request that results be shown for the linear predictor,
-#'   with no back-transformation. The default is \code{"link"}, unless the
-#'   \code{"predict.type"} option is in force; see \code{\link{emm_options}},
-#'   and also the section below on transformations and links.
+#' @param cross.adjust Character: \eqn{p}-value adjustment method to additionally
+#'   apply across the \code{by} groups.
+#' @param type Character: type of prediction desired, such as \code{"response"}
+#'   or \code{"link"}.
 #' @param df Numeric. If non-missing, a constant number of degrees of freedom to
-#'   use in constructing confidence intervals and \emph{P} values (\code{NA}
-#'   specifies asymptotic results).
-#' @param calc Named list of character value(s) or formula(s).
-#'   The expressions in \code{char} are evaluated and appended to the
-#'   summary, just after the \code{df} column. The expression may include
-#'   any names up through \code{df} in the summary, any additional names in
-#'   \code{object@grid} (such as \code{.wgt.} or \code{.offset.}), or any
-#'   earlier elements of \code{calc}.
-#' @param null Numeric. Null hypothesis value(s), on the linear-predictor scale,
-#'   against which estimates are tested. May be a single value used for all, or
-#'   a numeric vector of length equal to the number of tests in each family
-#'   (i.e., \code{by} group in the displayed table).
+#'   use in constructing confidence intervals and \emph{P} values.
+#' @param calc Named list of character values or formulas to append to the summary.
 #' @param delta Numeric value (on the linear-predictor scale). If zero, ordinary
 #'   tests of significance are performed. If positive, this specifies a
 #'   threshold for testing equivalence (using the TOST or two-one-sided-test
@@ -156,10 +119,10 @@ as.data.frame.summary_emm = function(x, ...) {
 #' @section Transformations and links:
 #'   With \code{type = "response"}, the transformation assumed can be found in
 #'   \samp{object@misc$tran}, and its label, for the summary is in
-#'   \samp{object@misc$inv.lbl}. Any \eqn{t} or \eqn{z} tests are still performed
-#'   on the scale of the linear predictor, not the inverse-transformed one.
-#'   Similarly, confidence intervals are computed on the linear-predictor scale,
-#'   then inverse-transformed.
+#'   \samp{object@misc$inv.lbl}. For non-bootstrap objects, any \eqn{t} or
+#'   \eqn{z} tests are performed on the scale of the linear predictor, not the
+#'   inverse-transformed one. Bootstrap intervals are percentile intervals from
+#'   the bootstrap distribution and are then inverse-transformed.
 #'
 #'   Be aware that only univariate transformations and links are
 #'   supported in this way. Some multivariate transformations are supported by
@@ -540,12 +503,22 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
     delta = abs(delta)
 
     result = .est.se.df(object, ...)
+    bootstrapped = !is.null(object@misc$bootstrap$draws)
+    if (bootstrapped) {
+        draws = object@misc$bootstrap$draws
+        coef.names = intersect(colnames(object@linfct), colnames(draws))
+        boot.est = object@linfct[, coef.names, drop = FALSE] %*%
+            t(draws[, coef.names, drop = FALSE])
+        result[[1]] = rowMeans(boot.est[use.elts, , drop = FALSE])
+        result$SE = apply(boot.est[use.elts, , drop = FALSE], 1, sd)
+        result$df = NULL
+    }
 
     lblnms = setdiff(names(grid),
                      c(object@roles$responses, ".offset.", ".wgt."))
     lbls = grid[lblnms]
 
-    zFlag = (all(is.na(result$df) | is.infinite(result$df)))
+    zFlag = !bootstrapped && (all(is.na(result$df) | is.infinite(result$df)))
     inv = (type %in% c("response", "mu", "unlink")) # flag to inverse-transform
     link = attr(result, "link")
     if (inv && is.null(link))
@@ -575,7 +548,7 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
     mesg = misc$initMesg
 
     # Look for "mesg" attribute in dffun
-    if (!is.null(dfm <- attr(object@dffun, "mesg")))
+    if (!bootstrapped && !is.null(dfm <- attr(object@dffun, "mesg")))
         mesg = c(mesg, paste("Degrees-of-freedom method:", dfm))
 
     ### Add an annotation when we show results on lp scale and
@@ -652,6 +625,8 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
         linkname = link$name
 
     if (infer[1]) { # add CIs
+        bootci = .bootstrap.ci(object, level, side, use.elts, adjust, fam.info)
+        if (is.null(bootci)) {
         acv = .adj.critval(result[[1]], level, result$df, adjust, fam.info, side, corrmat, by.rows, sch.rank)
         ###adjust = acv$adjust # in older versions, I forced same adj method for tests
         cv = acv$cv
@@ -682,6 +657,22 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
             result[[cnm[2]]] = clims[, idx[2]]
             mesg = c(mesg, paste("Intervals are back-transformed from the", linkname, "scale"))
         }
+        }
+        else {
+            cnm = if (zFlag) c("asymp.LCL", "asymp.UCL") else c("lower.CL","upper.CL")
+            result[cnm] = bootci
+            mesg = c(mesg, paste("Confidence level used:", level),
+                     "Intervals are percentile bootstrap intervals")
+            if (inv && !is.null(link)) {
+                clims = with(link, cbind(linkinv(result[[cnm[1]]]), linkinv(result[[cnm[2]]])))
+                tmp = apply(clims, 1, function(x) {
+                    z = diff(x); ifelse(is.na(z), 0, z) })
+                idx = if (all(tmp >= 0)) 1:2 else 2:1
+                result[[cnm[1]]] = clims[, idx[1]]
+                result[[cnm[2]]] = clims[, idx[2]]
+                mesg = c(mesg, paste("Intervals are back-transformed from the", linkname, "scale"))
+            }
+        }
     }
     if (infer[2]) { # add tests
         tnm = ifelse (zFlag, "z.ratio", "t.ratio")
@@ -692,19 +683,32 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
                 result[["null"]] = link$linkinv(null)
             if (all(result$null == 0))
                 result[["null"]] = NULL
-            if (side == 0) {
-                if (delta == 0) # two-sided sig test
-                    t.ratio = result[[tnm]] = (result[[1]] - null) / result$SE
-                else
-                    t.ratio = result[[tnm]] = (abs(result[[1]] - null) - delta) / result$SE
+            if (!bootstrapped) {
+                if (side == 0) {
+                    if (delta == 0) # two-sided sig test
+                        t.ratio = result[[tnm]] = (result[[1]] - null) / result$SE
+                    else
+                        t.ratio = result[[tnm]] = (abs(result[[1]] - null) - delta) / result$SE
+                }
+                else {
+                    t.ratio = result[[tnm]] = (result[[1]] - null + side * delta) / result$SE
+                }
+            }
+            else
+                t.ratio = rep(NA_real_, length(result[[1]]))
+            bootp = .bootstrap.p.value(object, result[[1]], null, side, delta, use.elts)
+            if (is.null(bootp)) {
+                apv = .adj.p.value(t.ratio, result$df, adjust, fam.info, tail, corrmat, by.rows, sch.rank)
+                adjust = apv$adjust   # in case it was abbreviated
+                result$p.value = apv$pval
+                mesg = c(mesg, apv$mesg)
             }
             else {
-                t.ratio = result[[tnm]] = (result[[1]] - null + side * delta) / result$SE
+                bap = .adj.bootstrap.p.value(bootp, adjust, fam.info, by.rows)
+                adjust = bap$adjust
+                result$p.value = bap$pval
+                mesg = c(mesg, bap$mesg)
             }
-            apv = .adj.p.value(t.ratio, result$df, adjust, fam.info, tail, corrmat, by.rows, sch.rank)
-            adjust = apv$adjust   # in case it was abbreviated
-            result$p.value = apv$pval
-            mesg = c(mesg, apv$mesg)
         }
         else {
             result$null = ifelse(is.null(summ.unlink$null), link$linkinv(0), link$linkinv(summ.unlink$null))
@@ -714,6 +718,8 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
             # we ignore everything about apv except the message
             mesg = c(mesg, apv$mesg)
         }
+        if (bootstrapped)
+            result[[tnm]] = NULL
 
         # Handle cross-adjustments
         if ( (length(by.rows) > 1) &&
@@ -747,6 +753,9 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
             mesg = c(mesg, paste("Tests are performed on the", linkname, "scale"))
     }
     if (inv) {
+        if (bootstrapped)
+            result$SE = apply(link$linkinv(boot.est[use.elts, , drop = FALSE]), 1, sd)
+        else
         result[["SE"]] = with(link, abs(mu.eta(result[[1]]) * result[["SE"]]))
         result[[1]] = with(link, linkinv(result[[1]]))
         if (bias.adjust)
@@ -767,6 +776,15 @@ summary.emmGrid <- function(object, infer, level, adjust, by,
         misc$pri.vars = names(object@levels)
     attr(summ, "pri.vars") = setdiff(union(misc$pri.vars, misc$by.vars), c(by, ".wgt.", ".offset."))
     attr(summ, "by.vars") = by
+    if (bootstrapped) {
+        interval.msg = "Intervals are percentile bootstrap intervals"
+        pvalue.msg = "P-values are percentile bootstrap probabilities"
+        if (interval.msg %in% mesg && pvalue.msg %in% mesg) {
+            mesg = mesg[mesg != pvalue.msg]
+            interval.idx = match(interval.msg, mesg)
+            mesg = append(mesg, pvalue.msg, after = interval.idx)
+        }
+    }
     attr(summ, "adjust") = adjust
     attr(summ, "side") = side
     attr(summ, "delta") = delta
@@ -1020,6 +1038,85 @@ as.data.frame.emmGrid = function(x,
     message("Note: adjust = \"", old, "\" was changed to \"", new,
             "\"\nbecause \"", old, "\" is ", reason)
     new
+}
+
+# Compute percentile p-values from bootstrap EMM or contrast estimates.
+.bootstrap.ci = function(object, level, side, use.elts, adjust, fam.info) {
+    draws = object@misc$bootstrap$draws
+    n.sides = if (side == 0) 2 else 1
+    if (!is.null(object@misc$.predFlag) || is.null(draws) ||
+        is.null(colnames(draws)) || is.null(colnames(object@linfct)))
+        return(NULL)
+    coef.names = intersect(colnames(object@linfct), colnames(draws))
+    if (length(coef.names) != ncol(object@linfct))
+        return(NULL)
+    if (adjust %in% c("bonferroni", "holm", "hochberg", "hommel", "BH", "BY", "fdr"))
+        alpha = (1 - level) / (n.sides * fam.info[2])
+    else if (adjust == "sidak")
+        alpha = (1 - level^(1 / fam.info[2])) / n.sides
+    else {
+        if (!adjust %in% c("none", "tukey", "scheffe", "dunnettx", "mvt"))
+            return(NULL)
+        if (adjust %in% c("tukey", "scheffe", "dunnettx", "mvt"))
+            warning("Adjustment '", adjust,
+                    "' is not available for percentile bootstrap intervals; using none")
+        alpha = (1 - level) / n.sides
+    }
+    boot.est = object@linfct[use.elts, coef.names, drop = FALSE] %*% t(draws[, coef.names, drop = FALSE])
+    ci = t(apply(boot.est, 1, quantile, probs = c(alpha, 1 - alpha), na.rm = TRUE,
+                 names = FALSE))
+    if (side < 0)
+        ci[, 1] = -Inf
+    else if (side > 0)
+        ci[, 2] = Inf
+    ci
+}
+
+.bootstrap.p.value = function(object, estimate, null, side, delta, use.elts) {
+    draws = object@misc$bootstrap$draws
+    if (is.null(draws) || is.null(colnames(draws)) || is.null(colnames(object@linfct)))
+        return(NULL)
+    coef.names = intersect(colnames(object@linfct), colnames(draws))
+    if (length(coef.names) != ncol(object@linfct))
+        return(NULL)
+    boot.est = object@linfct[use.elts, coef.names, drop = FALSE] %*% t(draws[, coef.names, drop = FALSE])
+    null = rep(null, length.out = length(estimate))
+    if (side == 0 && delta == 0) {
+        lower = rowMeans(sweep(boot.est, 1, null, "<="))
+        upper = rowMeans(sweep(boot.est, 1, null, ">="))
+        pval = pmin(1, 2 * pmin(lower, upper))
+    }
+    else if (side < 0)
+        pval = rowMeans(sweep(boot.est, 1, null + delta, "<="))
+    else if (side > 0)
+        pval = rowMeans(sweep(boot.est, 1, null - delta, ">="))
+    else
+        pval = rowMeans(abs(sweep(boot.est, 1, null, "-")) <= abs(estimate - null))
+    pval[!is.finite(pval)] = NA_real_
+    pval
+}
+
+# Apply adjustments that operate directly on p-values from bootstrap tails.
+.adj.bootstrap.p.value = function(pval, adjust, fam.info, by.rows) {
+    if ((fam.info[2] == 1) && !(adjust %.pin% "scheffe"))
+        adjust = "none"
+    methods = c("sidak", p.adjust.methods)
+    k = pmatch(adjust, methods)
+    if (is.na(k) || adjust %in% c("tukey", "scheffe", "dunnettx", "mvt")) {
+        warning("Adjustment '", adjust,
+                "' is not available for percentile bootstrap p-values; using none")
+        return(list(pval = pval, adjust = "none",
+                    mesg = "P-values are percentile bootstrap probabilities"))
+    }
+    pval = as.numeric(pval)
+    for (rows in by.rows) {
+        if (methods[k] == "sidak")
+            pval[rows] = 1 - (1 - pval[rows])^fam.info[2]
+        else
+            pval[rows] = p.adjust(pval[rows], method = methods[k])
+    }
+    list(pval = pval, adjust = methods[k],
+         mesg = "P-values are percentile bootstrap probabilities")
 }
 
 # utility to compute an adjusted p value

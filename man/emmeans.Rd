@@ -75,6 +75,25 @@ These arguments may also be used in lieu of \code{options}. See the
 \item{tran}{Placeholder to prevent it from being included in \code{...}.
 If non-missing, it is added to `options`. See the \sQuote{Options}
 section.}
+
+\item{bootstrap}{Logical value indicating whether to use bootstrap to estimate
+the coefficient covariance matrix. See the \sQuote{Bootstrap covariance}
+section below for details.}
+
+\item{bootstrap.n}{Numeric value specifying the number of bootstrap replicates.
+Default is 1000.}
+
+\item{bootstrap.seed}{Optional numeric value to set a reproducible seed for
+the bootstrap.}
+
+\item{bootstrap.type}{Type of bootstrap to use. The default is
+\code{"parametric"}, which simulates responses and refits the model.
+GLM and GEE objects support \code{"case"}; Gaussian GLM and GEE objects
+also support \code{"residual"}. For \code{lme4::merMod} models,
+the residual, case, wild, and REB methods use \pkg{lmeresampler}.}
+
+\item{bootstrap.args}{Named list of additional arguments specific to the
+chosen bootstrap method.}
 }
 \value{
 When \code{specs} is a \code{character} vector or one-sided formula,
@@ -96,6 +115,9 @@ contrasts among them. EMMs are also known as least-squares means.
 Users should also consult the documentation for \code{\link{ref_grid}},
 because many important options for EMMs are implemented there, via the
 \code{...} argument.
+Bootstrap covariance for mixed models can be requested with
+\code{bootstrap = TRUE}; use \code{bootstrap.type} to select a
+\pkg{lmeresampler} method.
 }
 \section{Overview}{
 
@@ -198,6 +220,58 @@ those vary slower than all the primary ones, but the first \code{by} variable
 varies the fastest within that hierarchy. See the examples.
 }
 
+\section{Bootstrap covariance}{
+
+For a mixed model fitted by \code{lme4::lmer} or \code{lme4::glmer},
+specify \code{bootstrap = TRUE} to estimate the coefficient covariance
+from bootstrap replicates. The number of replicates is controlled by
+\code{bootstrap.n} (default 1000), and \code{bootstrap.seed} optionally
+sets a reproducible seed. The seed state is restored after bootstrapping.
+
+The \code{bootstrap.type} argument selects the method:
+\describe{
+  \item{\code{"parametric"}}{Simulate responses from the fitted model and
+    refit the model. This is the default for mixed models.}
+  \item{\code{"residual"}}{Resample level-one residuals and refit the model.}
+  \item{\code{"case"}}{Resample observations or clusters and refit the model.}
+  \item{\code{"wild"}}{Multiply residuals by random auxiliary variables and
+    refit the model.}
+  \item{\code{"reb"}}{Use a random-effects block bootstrap.}
+}
+The default value is \code{"parametric"}.
+
+Additional method-specific settings are supplied in the named list
+\code{bootstrap.args}. The \code{resample} argument controls which levels
+are resampled by the case bootstrap; \code{reb_type} selects REB variant
+0, 1, or 2; \code{hccme} selects the heteroskedasticity-consistent
+adjustment for the wild bootstrap; \code{aux.dist} selects its auxiliary
+multiplier distribution; and \code{rbootnoise} adds noise to residual
+bootstrap resampling when needed for singular fits. These arguments are
+passed to \code{lmeresampler::bootstrap}.
+
+Bootstrap support is available for all model classes that are supported by
+\code{emmeans} and produce an estimable coefficient basis. The resampling
+method depends on the fitted-model class:
+\itemize{
+  \item \code{lme4::merMod} objects, including models fitted by
+    \code{lme4::lmer} and \code{lme4::glmer}, use simulated-response
+    refitting for parametric bootstrap and \pkg{lmeresampler} for the
+    residual, case, wild, and REB methods.
+  \item GLM and GEE objects support case resampling and refitting. Gaussian
+    GLM and GEE objects also support residual resampling and refitting.
+  \item Other supported model classes with compatible \code{simulate},
+    \code{model.frame}, \code{formula}, and refitting methods use
+    simulated-response refitting automatically.
+  \item Other supported model classes use coefficient draws from their
+    estimated covariance matrix. This includes models for which response
+    simulation or refitting is unavailable.
+}
+For bootstrapped objects, p-values from tests are percentile probabilities
+calculated from the bootstrap EMM or contrast estimates. Confidence
+intervals are percentile intervals calculated from the same bootstrap
+distributions.
+}
+
 \section{Options and \code{...}}{
 
   Arguments that could go in \code{options} may instead be included in \code{...},
@@ -237,6 +311,31 @@ emmeans (warp.lm, ~ tension | wool, adjust = "sidak")
 # Get all sets of EMMs for this model
 ( allsets <- emmeans(warp.lm, ".") )
 contrast(allsets, "eff")    # all effects
+
+# Bootstrap-based uncertainty for EMMs and pairwise contrasts
+fiber.lm <- lm(strength ~ machine * diameter, data = fiber)
+fiber.boot <- emmeans(fiber.lm, "machine", bootstrap = TRUE,
+                      bootstrap.n = 100, bootstrap.seed = 123)
+confint(fiber.boot)
+summary(pairs(fiber.boot), infer = c(TRUE, TRUE), adjust = "none")
+head(bootstrap_samples(fiber.boot))
+# Bootstrap inference for a mixed model (requires lme4 and lmeresampler)
+if (requireNamespace("lme4", quietly = TRUE) &&
+    requireNamespace("lmeresampler", quietly = TRUE)) {
+    sleepstudy.lmer <- lme4::lmer(Reaction ~ Days + (1 | Subject),
+                                  data = lme4::sleepstudy)
+    sleepstudy.boot <- emmeans(sleepstudy.lmer, ~ Days,
+        at = list(Days = c(0, 5, 9)), bootstrap = TRUE,
+        bootstrap.n = 50, bootstrap.seed = 123)
+    confint(sleepstudy.boot)
+
+    # A residual bootstrap is also available for mixed models
+    sleepstudy.resid <- emmeans(sleepstudy.lmer, ~ Days,
+        at = list(Days = c(0, 5, 9)), bootstrap = TRUE,
+        bootstrap.type = "residual", bootstrap.n = 50,
+        bootstrap.seed = 123)
+    confint(sleepstudy.resid)
+}
 
 
 \dontrun{

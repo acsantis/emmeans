@@ -42,44 +42,22 @@ is provided, it is used for both.}
 intervals, if \code{infer[1]} is \code{TRUE}.}
 
 \item{adjust}{Character value naming the method used to adjust \eqn{p} values
-or confidence limits; or to adjust comparison arrows in \code{plot}. See
-the P-value adjustments section below.}
+or confidence limits; see the P-value adjustments section below.}
 
 \item{by}{Character name(s) of variables to use for grouping into separate
 tables. This affects the family of tests considered in adjusted \emph{P}
 values.}
 
-\item{cross.adjust}{Character: \eqn{p}-value adjustment method to
-additionally apply \emph{across}
-the \code{by} groups. See the section on P-value adjustments for details.}
+\item{cross.adjust}{Character: \eqn{p}-value adjustment method to additionally
+apply across the \code{by} groups.}
 
-\item{type}{Character: type of prediction desired. This only has an effect if
-there is a known transformation or link function. \code{"response"}
-specifies that the inverse transformation be applied. \code{"mu"} (or
-equivalently, \code{"unlink"}) is usually the same as \code{"response"},
-but in the case where the model has both a link function and a response
-transformation, only the link part is back-transformed. Other valid values
-are \code{"link"}, \code{"lp"}, and \code{"linear.predictor"}; these are
-equivalent, and request that results be shown for the linear predictor,
-with no back-transformation. The default is \code{"link"}, unless the
-\code{"predict.type"} option is in force; see \code{\link{emm_options}},
-and also the section below on transformations and links.}
+\item{type}{Character: type of prediction desired, such as \code{"response"}
+or \code{"link"}.}
 
 \item{df}{Numeric. If non-missing, a constant number of degrees of freedom to
-use in constructing confidence intervals and \emph{P} values (\code{NA}
-specifies asymptotic results).}
+use in constructing confidence intervals and \emph{P} values.}
 
-\item{calc}{Named list of character value(s) or formula(s).
-The expressions in \code{char} are evaluated and appended to the
-summary, just after the \code{df} column. The expression may include
-any names up through \code{df} in the summary, any additional names in
-\code{object@grid} (such as \code{.wgt.} or \code{.offset.}), or any
-earlier elements of \code{calc}.}
-
-\item{null}{Numeric. Null hypothesis value(s), on the linear-predictor scale,
-against which estimates are tested. May be a single value used for all, or
-a numeric vector of length equal to the number of tests in each family
-(i.e., \code{by} group in the displayed table).}
+\item{calc}{Named list of character values or formulas to append to the summary.}
 
 \item{delta}{Numeric value (on the linear-predictor scale). If zero, ordinary
 tests of significance are performed. If positive, this specifies a
@@ -191,26 +169,9 @@ The \code{as.data.frame} method returns an object that inherits
 These are the primary methods for obtaining numerical or tabular results from
 an \code{emmGrid} object. \code{summary.emmGrid} is the general function for
 summarizing \code{emmGrid} objects. It also serves as the print method for
-these objects; so for convenience, \code{summary()} arguments may be included
-in calls to functions such as \code{\link{emmeans}} and
-\code{\link{contrast}} that construct \code{emmGrid} objects. Note that by
-default, summaries for Bayesian models are diverted to
-\code{\link{hpd.summary}}.
-}
-\details{
-\code{confint.emmGrid} is equivalent to \code{summary.emmGrid with
-infer = c(TRUE, FALSE)}. The function \code{test.emmGrid}, when called with
-\code{joint = FALSE}, is equivalent to \code{summary.emmGrid} with \code{infer = c(FALSE, TRUE)}.
-
-With \code{joint = TRUE}, \code{test.emmGrid} calculates the Wald test of the
-hypothesis \code{linfct \%*\% bhat = null}, where \code{linfct} and
-\code{bhat} refer to slots in \code{object} (possibly subsetted according to
-\code{by} or \code{rows}). An error is thrown if any row of \code{linfct} is
-non-estimable. It is permissible for the rows of \code{linfct} to be linearly
-dependent, as long as \code{null == 0}, in which case a reduced set of
-contrasts is tested. Linear dependence and nonzero \code{null} cause an
-error. The returned object has an additional \code{"est.fcns"} attribute, which
-is a list of the linear functions associated with the joint test.
+these objects; so for convenience, summary arguments may be included in calls
+to functions such as \code{emmeans} and \code{contrast} that construct
+\code{emmGrid} objects.
 }
 \note{
 In doing testing and a transformation and/or link is in force, any
@@ -257,10 +218,10 @@ If a data frame is needed, \code{summary}, \code{confint},
 
   With \code{type = "response"}, the transformation assumed can be found in
   \samp{object@misc$tran}, and its label, for the summary is in
-  \samp{object@misc$inv.lbl}. Any \eqn{t} or \eqn{z} tests are still performed
-  on the scale of the linear predictor, not the inverse-transformed one.
-  Similarly, confidence intervals are computed on the linear-predictor scale,
-  then inverse-transformed.
+  \samp{object@misc$inv.lbl}. For non-bootstrap objects, any \eqn{t} or
+  \eqn{z} tests are performed on the scale of the linear predictor, not the
+  inverse-transformed one. Bootstrap intervals are percentile intervals from
+  the bootstrap distribution and are then inverse-transformed.
 
   Be aware that only univariate transformations and links are
   supported in this way. Some multivariate transformations are supported by

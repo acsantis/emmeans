@@ -32,4 +32,16 @@ test_that("Interaction contrasts work", {
     expect_equal(nrow(summary(contrast(rgi, interaction = c("pairwise","consec")))), 9)
 })
 
+test_that("Parametric mixed-model bootstrap contrasts work", {
+    skip_if_not_installed("lme4")
+    fit = lme4::lmer(Reaction ~ Days + (1 | Subject), data = lme4::sleepstudy)
+    emm = emmeans(fit, ~ Days, at = list(Days = c(0, 10)),
+                  bootstrap = TRUE, bootstrap.type = "parametric",
+                  bootstrap.n = 10, bootstrap.seed = 42)
+    ctr = contrast(emm, "revpairwise")
+    expect_equal(ctr@misc$bootstrap$method, "simulate/refit")
+    expect_equal(nrow(bootstrap_samples(ctr, "coefficients")), 10)
+    expect_true("SE" %in% names(summary(ctr)))
+})
+
 

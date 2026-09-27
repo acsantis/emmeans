@@ -4,7 +4,9 @@
 \alias{emtrends}
 \title{Estimated marginal means of linear trends}
 \usage{
-emtrends(object, specs, var, delta.var = 0.001 * rng, max.degree = 1, ...)
+emtrends(object, specs, var, delta.var = 0.001 * rng, max.degree = 1,
+  bootstrap = FALSE, bootstrap.n = 1000, bootstrap.seed = NULL,
+  bootstrap.type = "parametric", bootstrap.args = list(), ...)
 }
 \arguments{
 \item{object}{A supported model object (\emph{not} a reference grid)}
@@ -37,8 +39,29 @@ equal to the coefficients of \eqn{(x – x_0)^{degree}} based on interpolating o
 the \eqn{degree + 1} fitted values centered at \eqn{x_0} and spaced \eqn{h} apart.
 These are also known as Newton divided differences.}
 
+\item{bootstrap}{Logical value indicating whether to generate bootstrap
+replicates for the estimated trends.}
+
+\item{bootstrap.n}{Number of bootstrap replicates (at least 2).}
+
+\item{bootstrap.seed}{Optional integer random-number seed.}
+
+\item{bootstrap.type}{Bootstrap method. The default is \code{"parametric"} for all models.
+GLM and GEE trends support \code{"case"}; Gaussian GLM and GEE trends
+support \code{"residual"}. \code{lme4::merMod} models support
+\code{"residual"}, \code{"case"}, \code{"wild"}, and \code{"reb"}
+use \pkg{lmeresampler}.}
+
+\item{bootstrap.args}{Named list of method-specific bootstrap arguments.}
+
 \item{...}{Additional arguments passed to \code{\link{ref_grid}} or
-\code{\link{emmeans}} as appropriate. See Details.}
+\code{\link{emmeans}} as appropriate. See Details. Bootstrap arguments
+include \code{bootstrap}, \code{bootstrap.n}, \code{bootstrap.seed},
+\code{bootstrap.type}, and \code{bootstrap.args}. The latter is a named
+list for method-specific options such as \code{resample},
+\code{reb_type}, \code{hccme}, \code{aux.dist}, and \code{rbootnoise}.
+Bootstrap summaries use empirical estimates, standard errors, percentile
+confidence intervals, and percentile p-values.}
 }
 \value{
 An \code{emmGrid} or \code{emm_list} object, according to \code{specs}.
@@ -64,7 +87,13 @@ arguments include optional arguments (often \code{mode}) that apply to
 specific models; \code{ref_grid} options such as \code{data}, \code{at},
 \code{cov.reduce}, \code{mult.names}, \code{nesting}, or \code{transform};
 and \code{emmeans} options such as \code{weights} (but please avoid
-\code{trend} or \code{offset}.
+\code{trend} or \code{offset}. Bootstrap options are also supported: use
+\code{bootstrap = TRUE}, \code{bootstrap.n}, and \code{bootstrap.seed}.
+For \code{lme4::merMod} models, select \code{bootstrap.type} as
+\code{"parametric"}, \code{"residual"}, \code{"case"}, \code{"wild"},
+or \code{"reb"}; method-specific settings are supplied in
+\code{bootstrap.args}. GLM and GEE trends also support \code{"case"};
+Gaussian GLM and GEE trends support \code{"residual"}.
 }
 \note{
 In earlier versions of \code{emtrends}, the first argument was named

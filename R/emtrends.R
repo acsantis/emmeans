@@ -43,7 +43,13 @@
 #' specific models; \code{ref_grid} options such as \code{data}, \code{at},
 #' \code{cov.reduce}, \code{mult.names}, \code{nesting}, or \code{transform};
 #' and \code{emmeans} options such as \code{weights} (but please avoid
-#' \code{trend} or \code{offset}.
+#' \code{trend} or \code{offset}. Bootstrap options are also supported: use
+#' \code{bootstrap = TRUE}, \code{bootstrap.n}, and \code{bootstrap.seed}.
+#' For \code{lme4::merMod} models, select \code{bootstrap.type} as
+#' \code{"parametric"}, \code{"residual"}, \code{"case"}, \code{"wild"},
+#' or \code{"reb"}; method-specific settings are supplied in
+#' \code{bootstrap.args}. GLM and GEE trends also support \code{"case"};
+#' Gaussian GLM and GEE trends support \code{"residual"}.
 #'
 #'
 #' @param object A supported model object (\emph{not} a reference grid)
@@ -71,8 +77,24 @@
 #' equal to the coefficients of \eqn{(x – x_0)^{degree}} based on interpolating over
 #' the \eqn{degree + 1} fitted values centered at \eqn{x_0} and spaced \eqn{h} apart.
 #' These are also known as Newton divided differences.
+#' @param bootstrap Logical value indicating whether to generate bootstrap
+#'   replicates for the estimated trends.
+#' @param bootstrap.n Number of bootstrap replicates (at least 2).
+#' @param bootstrap.seed Optional integer random-number seed.
+#' @param bootstrap.type Bootstrap method. The default is \code{"parametric"} for all models.
+#'   GLM and GEE trends support \code{"case"}; Gaussian GLM and GEE trends
+#'   support \code{"residual"}. \code{lme4::merMod} models support
+#'   \code{"residual"}, \code{"case"}, \code{"wild"}, and \code{"reb"}
+#'   use \pkg{lmeresampler}.
+#' @param bootstrap.args Named list of method-specific bootstrap arguments.
 #' @param ... Additional arguments passed to \code{\link{ref_grid}} or
-#'   \code{\link{emmeans}} as appropriate. See Details.
+#'   \code{\link{emmeans}} as appropriate. See Details. Bootstrap arguments
+#'   include \code{bootstrap}, \code{bootstrap.n}, \code{bootstrap.seed},
+#'   \code{bootstrap.type}, and \code{bootstrap.args}. The latter is a named
+#'   list for method-specific options such as \code{resample},
+#'   \code{reb_type}, \code{hccme}, \code{aux.dist}, and \code{rbootnoise}.
+#'   Bootstrap summaries use empirical estimates, standard errors, percentile
+#'   confidence intervals, and percentile p-values.
 #'
 #' @section Generalizations:
 #' Instead of a single predictor, the user may specify some monotone function of
@@ -151,11 +173,16 @@
 #' contrast(emm, "poly")
 #' # Some P values are comparable, some aren't! See Note in documentation
 emtrends = function(object, specs, var, delta.var=.001*rng,
-                    max.degree = 1, ...) {
+                    max.degree = 1, bootstrap = FALSE, bootstrap.n = 1000,
+                    bootstrap.seed = NULL, bootstrap.type = "parametric",
+                    bootstrap.args = list(), ...) {
     estName = paste(var, "trend", sep=".") # Do now as I may replace var later
 
     # construct our first call to ref_grid() to get the data...
-    rgargs = list(object = object, ...)
+    rgargs = list(object = object, bootstrap = bootstrap,
+                  bootstrap.n = bootstrap.n, bootstrap.seed = bootstrap.seed,
+                  bootstrap.type = bootstrap.type, bootstrap.args = bootstrap.args,
+                  ...)
     if (is.null(rgargs$options))
         rgargs$options = list()
 
@@ -209,7 +236,10 @@ emtrends = function(object, specs, var, delta.var=.001*rng,
     arr = array(seq_len(nrow(bigRG@linfct)), c(gdim / mdim, length(delts), mdim))
     var.subs = lapply(seq_along(delts), function(i) as.numeric(arr[,i,]))
 
+    bootstrap.info = bigRG@misc$bootstrap
     RG = orig.rg = bigRG[var.subs[[idx.base]]]  # the subset that corresponds to reference values
+    if (!is.null(bootstrap.info))
+        RG@misc$bootstrap = bootstrap.info
 
     row.names(RG@grid) = seq_along(RG@grid[[1]])
 
